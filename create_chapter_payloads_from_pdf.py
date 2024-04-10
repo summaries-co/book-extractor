@@ -3,7 +3,11 @@ from pypdf import PdfReader
 import json
 import pprint
 import os
-  
+import logging
+
+logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
+
+
 def bookmark_dict(
     bookmark_list, reader: PdfReader, use_labels: bool = False,
 ) -> Dict[Union[str, int], str]:
@@ -11,7 +15,7 @@ def bookmark_dict(
     Extract all bookmarks as a flat dictionary.
 
     Args:
-        bookmark_list: The reader.outline or a recursive call
+        bookmark_list: The reader. outline or a recursive call
         use_labels: If true, use page labels. If False, use page indices.
 
     Returns:
@@ -34,17 +38,24 @@ def bookmark_dict(
                 result[page_index] = item.title
     return result
 
-# array to json file
+
 def array_to_json_file(array, file_name):
-    with open(file_name, 'w', encoding='utf-8') as json_file:
-        json.dump(array, json_file, ensure_ascii=False, indent=4)
-    return None
+    """
+    Saves a list of dictionaries to a JSON file.
+    """
+    try:
+        with open(file_name, 'w', encoding='utf-8') as json_file:
+            json.dump(array, json_file, ensure_ascii=False, indent=4)
+    except Exception as e:
+        logging.error(f"Error saving JSON: {e}")
+
 
 def construct_page_splits_array(reader, bms):
     last_page = len(reader.pages)
     split_at_list = list(bms.keys())
     split_at_list.append(last_page)
     return split_at_list
+
 
 def construct_start_and_end_arrays(split_at_pages):
     start = 0
@@ -55,53 +66,56 @@ def construct_start_and_end_arrays(split_at_pages):
             start = 1
             end = split_at_pages[i]
         else:
-            start = split_at_pages[i-1]
+            start = split_at_pages[i - 1]
             end = split_at_pages[i]
         print(f"Start: {start}, End: {end}")
         splits.append((start, end))
     return splits
 
+
 def get_chapter(split, reader, bms):
     content = []
-    #print(split)
+    # print(split)
     start, end = split
-    #print(start, end)
+    # print(start, end)
     t = type(start)
     name = bms.get(start, '')
     print(f'Search for {start} as type {t} and found {name}')
 
     for page_nb in range(int(start), int(end)):
         page_text = reader.pages[page_nb].extract_text()
-        content.append(page_text)   
+        content.append(page_text)
     chapter_content = ''.join(content)
     return {
         'name': name,
         'contents': chapter_content,
-        'type_of_name': t.__name__ #keep .__name__ this here
+        'type_of_name': t.__name__  # keep .__name__ this here
     }
+
 
 def get_chapter_name_from_contents(contents):
     first_part = contents[0:1000]
     print(first_part)
     pass
 
+
 def count_words(text):
     return len(text.split(' '))
 
+
 # get all files in a directory
 def get_files_in_directory(directory):
-
     files = os.listdir(directory)
     return files
 
+
 def extract_pdf_chapters(book_name, pdf_file_path):
-    #book_name = '1626813582'
+    # book_name = '1626813582'
 
     reader = PdfReader(pdf_file_path)
     bms = bookmark_dict(reader.outline, reader, use_labels=True)
     print(bms.keys())
     print(bms.values())
-
 
     for page_nb, title in sorted(bms.items(), key=lambda n: f"{str(n[0]):>5}"):
         print(f"{page_nb:>3}: {title}")
@@ -222,7 +236,6 @@ def analyze_raw_extraction(data):
         print(f"{chapter['name']} has {words} words")
         total_word_count += words
 
-
     filtered_data = exclude_fluff_from_request_bodies(data)
     number_of_excluded_chapters = chapter_count - len(filtered_data)
 
@@ -230,10 +243,9 @@ def analyze_raw_extraction(data):
     filtered_chapters_with_count = ''
     for index, chapter in enumerate(filtered_data):
         words = count_words(chapter['contents'])
-        #print(f"{chapter['name']} has {words} words")
+        # print(f"{chapter['name']} has {words} words")
         filtered_total_word_count += words
         filtered_chapters_with_count += f"{chapter['name']} -- {words} words\n"
-
 
     return {
         'chapter_count': chapter_count,
@@ -244,8 +256,10 @@ def analyze_raw_extraction(data):
         "filtered_chapters_with_count": filtered_chapters_with_count
     }
 
+
 def is_pdf(file):
     return file.endswith('.pdf')
+
 
 def propagate_name_to_part(arr):
     propagate_name = None
@@ -261,63 +275,100 @@ def propagate_name_to_part(arr):
             arr[i]["part"] = propagate_name
     return arr
 
+
 def remove_empty_chapters(arr):
     return [obj for obj in arr if obj["contents"] != ""]
+
 
 def re_sequence_chapters(arr):
     for i, obj in enumerate(arr):
         arr[i]["sequence_index"] = i
     return arr
 
-def inject_isbn_to_chapters(arr, isbn):
-    for i, obj in enumerate(arr):
-        arr[i]["isbn"] = isbn
+
+def inject_book_info_to_chapters(arr, book_name, isbn=None):
+    """
+    Injects book information into each chapter dictionary.
+
+    Args:
+        arr (list): List of chapter dictionaries.
+        book_name (str): The name of the book.
+        isbn (str, optional): The ISBN of the book. Defaults to None.
+
+    Returns:
+        list: The updated list of chapter dictionaries with book information.
+    """
+    for chapter in arr:
+        chapter["book_name"] = book_name
+        if isbn:
+            chapter["isbn"] = isbn
     return arr
+
 
 def remove_type_of_name_helper(arr):
     for i, obj in enumerate(arr):
         arr[i].pop("type_of_name", None)
     return arr
 
-def process_pdf(pdf_file_path, output_directory=None):
+
+def process_pdf(pdf_file_path, book_name, output_directory, isbn=None):
+    """
+    Main function to process the PDF file, extract chapters based on bookmarks,
+    and save the extracted chapters as a JSON file after applying various transformations.
+    """
     try:
-        book_name = os.path.basename(pdf_file_path).split('.')[0]
-        print(f"Processing PDF: {pdf_file_path}")
+        logging.info(f"Processing PDF: {pdf_file_path} for book {book_name}")
         chapters = extract_pdf_chapters(book_name, pdf_file_path)
+
         filter_chapters = exclude_fluff_from_request_bodies(chapters)
         chapters_with_part_info = propagate_name_to_part(filter_chapters)
         chapters_without_empty = remove_empty_chapters(chapters_with_part_info)
         chapters_resequenced = re_sequence_chapters(chapters_without_empty)
-        chapters_with_isbn = inject_isbn_to_chapters(chapters_resequenced, book_name)
+        chapters_with_isbn = inject_book_info_to_chapters(chapters_resequenced, book_name, isbn)
         chapters_without_type_of_name = remove_type_of_name_helper(chapters_with_isbn)
-        print('Done processing', pdf_file_path)
+
         results = analyze_raw_extraction(chapters)
         pprint.pprint(results)
-        output_file_path = os.path.join(output_directory, f"{book_name}_autosplits.json")
-        array_to_json_file(chapters_without_type_of_name, output_file_path)
-        print('Done processing', pdf_file_path)
+
+        if chapters_without_type_of_name:
+            output_file_path = os.path.join(output_directory, f"{book_name}_autosplits.json")
+            array_to_json_file(chapters_without_type_of_name, output_file_path)
+            logging.info(f"Data saved to {output_file_path}")
+        else:
+            logging.error("No chapters were processed.")
     except Exception as e:
-        print(f"Failed to process {pdf_file_path}")
-        print(e)
+        logging.error(f"Error processing {pdf_file_path}: {e}")
+
 
 def get_chapter_payloads_from_pdf(isbn, pdf_file_path):
+    """
+    Extract and process chapters from PDF specified by its ISBN and file path,
+    returning the chapters data after transformations.
+    """
     try:
-        print(f"Processing PDF: {pdf_file_path}")
+        logging.info(f"Extracting chapters from PDF: {pdf_file_path} with ISBN: {isbn}")
         chapters = extract_pdf_chapters(isbn, pdf_file_path)
+
         filter_chapters = exclude_fluff_from_request_bodies(chapters)
         chapters_with_part_info = propagate_name_to_part(filter_chapters)
         chapters_without_empty = remove_empty_chapters(chapters_with_part_info)
         chapters_resequenced = re_sequence_chapters(chapters_without_empty)
-        chapters_with_isbn = inject_isbn_to_chapters(chapters_resequenced, isbn)
+        chapters_with_isbn = inject_book_info_to_chapters(chapters_resequenced, isbn, isbn)
         chapters_without_type_of_name = remove_type_of_name_helper(chapters_with_isbn)
+
+        logging.info(f"Processed {len(chapters_without_type_of_name)} chapters.")
         return chapters_without_type_of_name
     except Exception as e:
-        print(f"Failed to process {pdf_file_path}")
-        print(e)
+        logging.error(f"Failed processing PDF {pdf_file_path} with ISBN {isbn}: {e}")
         raise e
 
+
 if __name__ == "__main__":
-    isbn = '1626813582'
-    pdf_path = f'data/{isbn}.pdf'
+    # ISBN can be used for books that have it, otherwise use a unique book name
+    isbn = None  # '1626813582'
+    book_name = 'Converted_Le Petit Prince - Antoine de Saint-Exupéry'
+    pdf_path = f'data/{book_name}.pdf'
     data_path = 'data'
-    process_pdf(pdf_path, data_path)
+
+    # Run the process_pdf function and handle potential errors
+    process_pdf(pdf_path, book_name, data_path, isbn=isbn)
