@@ -285,23 +285,9 @@ def re_sequence_chapters(arr):
         arr[i]["sequence_index"] = i
     return arr
 
-
-def inject_book_info_to_chapters(arr, book_name, isbn=None):
-    """
-    Injects book information into each chapter dictionary.
-
-    Args:
-        arr (list): List of chapter dictionaries.
-        book_name (str): The name of the book.
-        isbn (str, optional): The ISBN of the book. Defaults to None.
-
-    Returns:
-        list: The updated list of chapter dictionaries with book information.
-    """
-    for chapter in arr:
-        chapter["book_name"] = book_name
-        if isbn:
-            chapter["isbn"] = isbn
+def inject_isbn_to_chapters(arr, isbn):
+    for i, obj in enumerate(arr):
+        arr[i]["isbn"] = isbn
     return arr
 
 
@@ -310,21 +296,22 @@ def remove_type_of_name_helper(arr):
         arr[i].pop("type_of_name", None)
     return arr
 
-
-def process_pdf(pdf_file_path, book_name, output_directory, isbn=None):
+def process_pdf(pdf_file_path, output_directory=None):
     """
-    Main function to process the PDF file, extract chapters based on bookmarks,
-    and save the extracted chapters as a JSON file after applying various transformations.
-    """
+        Main function to process the PDF file, extract chapters based on bookmarks,
+        and save the extracted chapters as a JSON file after applying various transformations.
+        """
     try:
-        logging.info(f"Processing PDF: {pdf_file_path} for book {book_name}")
+        book_name = os.path.basename(pdf_file_path).split('.')[0]
+        logging.info(f"Processing PDF: {pdf_file_path}")
+
         chapters = extract_pdf_chapters(book_name, pdf_file_path)
 
         filter_chapters = exclude_fluff_from_request_bodies(chapters)
         chapters_with_part_info = propagate_name_to_part(filter_chapters)
         chapters_without_empty = remove_empty_chapters(chapters_with_part_info)
         chapters_resequenced = re_sequence_chapters(chapters_without_empty)
-        chapters_with_isbn = inject_book_info_to_chapters(chapters_resequenced, book_name, isbn)
+        chapters_with_isbn = inject_isbn_to_chapters(chapters_resequenced, book_name)
         chapters_without_type_of_name = remove_type_of_name_helper(chapters_with_isbn)
 
         results = analyze_raw_extraction(chapters)
@@ -353,7 +340,7 @@ def get_chapter_payloads_from_pdf(isbn, pdf_file_path):
         chapters_with_part_info = propagate_name_to_part(filter_chapters)
         chapters_without_empty = remove_empty_chapters(chapters_with_part_info)
         chapters_resequenced = re_sequence_chapters(chapters_without_empty)
-        chapters_with_isbn = inject_book_info_to_chapters(chapters_resequenced, isbn, isbn)
+        chapters_with_isbn = inject_isbn_to_chapters(chapters_resequenced, isbn)
         chapters_without_type_of_name = remove_type_of_name_helper(chapters_with_isbn)
 
         logging.info(f"Processed {len(chapters_without_type_of_name)} chapters.")
@@ -364,11 +351,7 @@ def get_chapter_payloads_from_pdf(isbn, pdf_file_path):
 
 
 if __name__ == "__main__":
-    # ISBN can be used for books that have it, otherwise use a unique book name
-    isbn = None  # '1626813582'
-    book_name = 'Converted_Le Petit Prince - Antoine de Saint-Exupéry'
-    pdf_path = f'data/{book_name}.pdf'
+    isbn = '9354990517'
+    pdf_path = f'data/{isbn}.pdf'
     data_path = 'data'
-
-    # Run the process_pdf function and handle potential errors
-    process_pdf(pdf_path, book_name, data_path, isbn=isbn)
+    process_pdf(pdf_path, data_path)
