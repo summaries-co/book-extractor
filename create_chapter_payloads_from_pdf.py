@@ -1,3 +1,5 @@
+import copy
+import re
 from typing import Dict, Union
 from pypdf import PdfReader
 import json
@@ -100,6 +102,17 @@ def get_chapter_name_from_contents(contents):
 
 
 def count_words(text):
+    """
+       Count words in a string using regular expressions.
+
+       This function utilizes a regular expression (`\b\w+\b`) to count words more accurately than
+       simple space-based splitting. It identifies words as sequences of alphanumeric characters
+       separated by word boundaries, ensuring accurate word counts in texts with punctuation,
+       spaces, or special characters.
+       These changes will alter the result, can they be made?
+           words = re.findall(r'\b\w+\b', text)
+        return len(words)
+    """
     return len(text.split(' '))
 
 
@@ -177,56 +190,62 @@ def exclude_fluff_from_request_bodies(json_data):
             "author"
         ]
         exclude_indices = []
+
         for index, request_body in enumerate(json_data):
             try:
                 chapter_contents = request_body["contents"]
+                chapter_name = request_body["name"].lower()
 
-                if "chapter" in request_body["name"].lower():
-                    print(
-                        "CHAPTER DOES NOT NEED TO BE FILTERED: ", request_body["name"]
-                    )
+                # Log if chapter should not be filtered
+                if "chapter" in chapter_name:
+                    print(f"CHAPTER DOES NOT NEED TO BE FILTERED: {request_body['name']}")
                     continue
+
                 # Exclude chapters with exclusionary keywords
-                if any(
-                    [
-                        keyword in request_body["name"].lower()
-                        for keyword in exclude_keywords
-                    ]
-                ):
+                if any(keyword in chapter_name for keyword in exclude_keywords):
                     exclude_indices.append(index)
-                    print("\tEXCLUDED CHAPTER - KEYWORDS FLUFF", request_body["name"])
+                    print(f"\tEXCLUDED CHAPTER - KEYWORDS FLUFF: {request_body['name']}")
                     continue
+
                 # Exclude if chapters not big enough
                 if count_words(chapter_contents) < 1000:
                     exclude_indices.append(index)
+                    """
+                    The function "count_words" returns the number of words, not characters, 
+                    so it would be correct to use 'words' to describe it. 
+                    If we want to indicate the number of characters, need to create a new function:
+                     def count_characters(text):
+                         return len(text)
+                    """
                     print(
-                        "\tEXCLUDED CHAPTER - TOO SMALL",
-                        request_body["name"],
-                        count_words(chapter_contents),
-                        " characters",
-                    )
-                    continue
+                        f"\tEXCLUDED CHAPTER - TOO SMALL: {request_body['name']} ({count_words(chapter_contents)} words)")
                 else:
-                    print(
-                        "CHAPTER DOES NOT NEED TO BE FILTERED: ", request_body["name"]
-                    )
-            except:
-                print("something went wrong in chapter fluff filtering")
+                    print(f"CHAPTER DOES NOT NEED TO BE FILTERED: {request_body['name']}")
+
+            except Exception as e:
+                print(f"Error during chapter fluff filtering {request_body['name']}: {str(e)}")
+
+        included_request_bodies = [
+            request_body for index, request_body in enumerate(json_data)
+            if index not in exclude_indices
+        ]
         try:
-            included_request_bodies = [
-                request_body
-                for index, request_body in enumerate(json_data)
-                if index not in exclude_indices
-            ]
-            print("\nCHAPTERS INCLUDED: ")
+            print("\nCHAPTERS INCLUDED:")
             for request_body in included_request_bodies:
-                print(request_body["name"])
-            filtered_request_bodies = included_request_bodies
-            return filtered_request_bodies
+                try:
+                    print(request_body["name"])
+                except KeyError:
+                    print("Error: 'name' key is missing in some request bodies.")
         except Exception as e:
-            print("Failed to exclude fluff from request bodies")
-            return None
-        
+            print(f"Error during the fluff filtering process: {str(e)}")
+
+        # Using deepcopy to create a complete copy of the data, excluding unwanted elements
+        filtered_request_bodies = copy.deepcopy(
+            [request_body for index, request_body in enumerate(json_data) if index not in exclude_indices])
+
+        return filtered_request_bodies
+
+
 def analyze_raw_extraction(data):
     chapter_count = len(data)
     total_word_count = 0
@@ -286,22 +305,9 @@ def re_sequence_chapters(arr):
     return arr
 
 
-def inject_book_info_to_chapters(arr, book_name, isbn=None):
-    """
-    Injects book information into each chapter dictionary.
-
-    Args:
-        arr (list): List of chapter dictionaries.
-        book_name (str): The name of the book.
-        isbn (str, optional): The ISBN of the book. Defaults to None.
-
-    Returns:
-        list: The updated list of chapter dictionaries with book information.
-    """
-    for chapter in arr:
-        chapter["book_name"] = book_name
-        if isbn:
-            chapter["isbn"] = isbn
+def inject_isbn_to_chapters(arr, isbn):
+    for i, obj in enumerate(arr):
+        arr[i]["isbn"] = isbn
     return arr
 
 
@@ -311,20 +317,28 @@ def remove_type_of_name_helper(arr):
     return arr
 
 
-def process_pdf(pdf_file_path, book_name, output_directory, isbn=None):
+def process_pdf(pdf_file_path, output_directory=None, apply_exclude_fluff=True, apply_remove_empty_chapters=True):
     """
-    Main function to process the PDF file, extract chapters based on bookmarks,
-    and save the extracted chapters as a JSON file after applying various transformations.
-    """
+        Main function to process the PDF file, extract chapters based on bookmarks,
+        and save the extracted chapters as a JSON file after applying various transformations.
+        """
     try:
-        logging.info(f"Processing PDF: {pdf_file_path} for book {book_name}")
+        book_name = os.path.basename(pdf_file_path).split('.')[0]
+        logging.info(f"Processing PDF: {pdf_file_path}")
+
         chapters = extract_pdf_chapters(book_name, pdf_file_path)
 
-        filter_chapters = exclude_fluff_from_request_bodies(chapters)
-        chapters_with_part_info = propagate_name_to_part(filter_chapters)
-        chapters_without_empty = remove_empty_chapters(chapters_with_part_info)
+        if apply_exclude_fluff:
+            chapters = exclude_fluff_from_request_bodies(chapters)
+        chapters_with_part_info = propagate_name_to_part(chapters)
+
+        if apply_remove_empty_chapters:
+            chapters_without_empty = remove_empty_chapters(chapters_with_part_info)
+        else:
+            chapters_without_empty = chapters_with_part_info
+
         chapters_resequenced = re_sequence_chapters(chapters_without_empty)
-        chapters_with_isbn = inject_book_info_to_chapters(chapters_resequenced, book_name, isbn)
+        chapters_with_isbn = inject_isbn_to_chapters(chapters_resequenced, book_name)
         chapters_without_type_of_name = remove_type_of_name_helper(chapters_with_isbn)
 
         results = analyze_raw_extraction(chapters)
@@ -353,7 +367,7 @@ def get_chapter_payloads_from_pdf(isbn, pdf_file_path):
         chapters_with_part_info = propagate_name_to_part(filter_chapters)
         chapters_without_empty = remove_empty_chapters(chapters_with_part_info)
         chapters_resequenced = re_sequence_chapters(chapters_without_empty)
-        chapters_with_isbn = inject_book_info_to_chapters(chapters_resequenced, isbn, isbn)
+        chapters_with_isbn = inject_isbn_to_chapters(chapters_resequenced, isbn)
         chapters_without_type_of_name = remove_type_of_name_helper(chapters_with_isbn)
 
         logging.info(f"Processed {len(chapters_without_type_of_name)} chapters.")
@@ -364,11 +378,9 @@ def get_chapter_payloads_from_pdf(isbn, pdf_file_path):
 
 
 if __name__ == "__main__":
-    # ISBN can be used for books that have it, otherwise use a unique book name
-    isbn = None  # '1626813582'
-    book_name = 'Converted_Le Petit Prince - Antoine de Saint-Exupéry'
-    pdf_path = f'data/{book_name}.pdf'
+    isbn = '1626813582'
+    pdf_path = f'data/{isbn}.pdf'
     data_path = 'data'
-
-    # Run the process_pdf function and handle potential errors
-    process_pdf(pdf_path, book_name, data_path, isbn=isbn)
+    apply_exclude_fluff = True
+    apply_remove_empty_chapters = True
+    process_pdf(pdf_path, data_path, apply_exclude_fluff, apply_remove_empty_chapters)
