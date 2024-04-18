@@ -378,7 +378,9 @@ def get_chapter_payloads_from_pdf(isbn, pdf_file_path):
 
 
 if __name__ == "__main__":
-    isbn = '9354990517'
+    isbn = '1626813582'
     pdf_path = f'data/{isbn}.pdf'
     data_path = 'data'
-    process_pdf(pdf_path, data_path)
+    apply_exclude_fluff = False
+    apply_remove_empty_chapters = False
+    process_pdf(pdf_path, data_path, apply_exclude_fluff, apply_remove_empty_chapters)

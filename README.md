@@ -5,7 +5,14 @@ This project utilizes Poetry for dependency management and packaging.
 
 ## Prerequisites
 
-- Python 3.9.2
+### Python 3.9.2
+Make sure you have python 3.9.2 running
+```
+pyenv local 3.9.2
+python3 -V
+```
+
+
 - [Poetry](https://python-poetry.org/docs/)
 
 Make sure you have Poetry installed. If you need to install Poetry, run:
@@ -22,6 +29,15 @@ poetry --version
 To install the project dependencies, navigate to the project's root directory and run:
 ```
 poetry install
+```
+
+### Activating/Exiting the Poetry Shell Environment:
+```
+poetry shell
+```
+
+```
+exit
 ```
 
 ### Running Scripts:
