@@ -1,82 +1,123 @@
-from pypdf import PdfReader
-import pprint
-import os
+import re
 import json
+import os
+import logging
+from pypdf import PdfReader
 
-'''
-{
-    isbn
-    page_number
-    contents
-    contains_images
-    word_count
-}
+# Set up basic configuration for logging to capture important messages and errors.
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-'''
 
 def clean_contents(contents):
-    cleaned_contents = contents.strip()
-    return cleaned_contents
+    """
+    Strips the given content string of leading and trailing whitespace.
+
+    Args:
+        contents (str): The content string to be cleaned.
+
+    Returns:
+        str: The cleaned content string.
+    """
+    return contents.strip() if contents else ''
+
 
 def count_words(text):
     """
-    Count words in a string using regular expressions.
+    Counts the number of words in the given text using a regular expression that matches word boundaries.
 
-    This function utilizes a regular expression (`\b\w+\b`) to count words more accurately than
-    simple space-based splitting. It identifies words as sequences of alphanumeric characters
-    separated by word boundaries, ensuring accurate word counts in texts with punctuation,
-    spaces, or special characters.
-    These changes will alter the result, can they be made?
-        words = re.findall(r'\b\w+\b', text)
-     return len(words)
+    Args:
+        text (str): The text in which to count words.
+
+    Returns:
+        int: The number of words found in the text.
     """
-    return len(text.split(" "))
+    return len(re.findall(r'\b\w+\b', text))
 
-def read_pdf(pdf_path, isbn):
-    pages_array = []
-    reader = PdfReader(pdf_path)
-    pages = reader.pages
 
-    for page in pages:
-
-        contents = page.extract_text()
-        #contents = clean_contents(contents)
-        page_number = page.page_number + 1
-        contains_images = True if page.images else False
-        page_information = {
-            "isbn": isbn,
-            "page_number": page_number,
-            "contents": contents,
-            "contains_images": contains_images,
-            "word_count": count_words(contents)
-        }
-
-        print(contents)
-        pages_array.append(page_information)
-        
-   
-    return pages_array
-    
-
-def write_output(isbn, output_directory):
-    output_file_path = os.path.join(
-        output_directory, f"{isbn}_page_autosplits.json"
-    )
-    return output_file_path
-
-def array_to_json_file(array, file_name):
+def extract_page_data(page, isbn):
     """
-    Saves a list of dictionaries to a JSON file.
+    Extracts metadata from a single PDF page.
+
+    Args:
+        page (PageObject): A PyPDF2 PageObject from which to extract data.
+        isbn (str): The ISBN number of the PDF document.
+
+    Returns:
+        dict: A dictionary containing metadata of the PDF page.
+    """
+    contents = clean_contents(page.extract_text())
+    contains_images = bool(page.images)  # Converts list to a boolean, True if images are present, otherwise False.
+    return {
+        "isbn": isbn,
+        "page_number": page.page_number + 1,  # Adding 1 to make the page number human-readable (1-indexed).
+        "contents": contents,
+        "contains_images": contains_images,
+        "word_count": count_words(contents)
+    }
+
+
+def read_pdf_and_extract_data(pdf_path, isbn):
+    """
+    Reads a PDF file and extracts metadata for each page.
+
+    Args:
+        pdf_path (str): The file path to the PDF.
+        isbn (str): The ISBN number of the PDF document.
+
+    Returns:
+        list: A list of dictionaries, each containing metadata for a single page.
     """
     try:
-        with open(file_name, "w", encoding="utf-8") as json_file:
-            json.dump(array, json_file, ensure_ascii=False, indent=4)
+        reader = PdfReader(pdf_path)
+        return [extract_page_data(page, isbn) for page in reader.pages]
     except Exception as e:
-        print('error', e)
+        logging.error(f"Failed to read or process PDF {pdf_path}: {e}")
+        return []  # Return an empty list in case of failure.
+
+
+def ensure_directory_exists(directory_path):
+    """
+    Ensures that the specified directory exists, creating it if necessary.
+
+    Args:
+        directory_path (str): The path of the directory to check or create.
+    """
+    if not os.path.exists(directory_path):
+        os.makedirs(directory_path)
+        logging.info(f"Created directory: {directory_path}")
+
+
+def write_json_output(pages_data, isbn, output_directory):
+    """
+    Writes the extracted page data to a JSON file.
+
+    Args:
+        pages_data (list): List of dictionaries containing page data.
+        isbn (str): The ISBN number used to name the output file.
+        output_directory (str): Directory where the output file will be saved.
+    """
+    ensure_directory_exists(output_directory)
+
+    output_file_path = os.path.join(output_directory, f"{isbn}_page_metadata.json")
+
+    try:
+        with open(output_file_path, "w", encoding="utf-8") as json_file:
+            json.dump(pages_data, json_file, ensure_ascii=False, indent=4)
+        logging.info(f"Metadata JSON file created at {output_file_path}")
+    except Exception as e:
+        logging.error(f"Failed to write output JSON file: {e}")
+
 
 if __name__ == "__main__":
-    isbn = "1626813582"
-    pdf_path = f"test_data/{isbn}.pdf"
-    pages = read_pdf(pdf_path, isbn)
-    output_file_path = write_output(isbn, 'test_data/')
-    array_to_json_file(pages, output_file_path)
+    # This script extracts metadata from each page of the PDF and saves this data to a JSON file.
+
+    # Set the ISBN of the PDF file and ensure the file follows the '{ISBN}.pdf' naming format.
+    # Define the directory path where your PDF file is stored.
+    isbn = '9354990517'
+    data_path = 'data'
+    pdf_path = f'{data_path}/{isbn}.pdf'
+    try:
+        pages_metadata = read_pdf_and_extract_data(pdf_path, isbn)
+        write_json_output(pages_metadata, isbn, data_path)
+    except Exception as e:
+        logging.error(f"An error occurred: {e}")

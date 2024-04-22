@@ -72,11 +72,16 @@ def create_individual_pdf_pages(pdf_file_path):
 
 
 if __name__ == "__main__":
+    # The script will create a folder with individual PDFs for each page of the specified document.
+
     # Set the ISBN of your PDF file here. Ensure the file is named in the format '{ISBN}.pdf'.
     # Adjust 'data_path' to the directory where your PDF file is located.
-    # The script will create a folder with individual PDFs for each page of the specified document.
     isbn = '9354990517'
     data_path = 'data'
     pdf_path = f'{data_path}/{isbn}.pdf'
-    create_individual_pdf_pages(pdf_path)
+    try:
+        create_individual_pdf_pages(pdf_path)
+        logging.info("Successfully created individual PDF pages.")
+    except Exception as e:
+        logging.error(f"An error occurred while processing the PDF: {e}")
 
