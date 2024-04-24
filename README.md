@@ -52,4 +52,9 @@ To add new dependencies to the project, use
 poetry add <package-name>.
 ```
 
+## Colab Notebooks
+This notebook is used for testing and demonstrating the functionality of our book extraction code.
+- [Test Notebook](https://colab.research.google.com/github/summaries-co/book-extractor/blob/main/test.ipynb) 
 
+This notebook processes an uploaded PDF using the provided ISBN. It performs chapter extraction, generating a structured JSON file with the contents of each chapter.
+- [Chapter Extraction Notebook](https://colab.research.google.com/drive/1c6yoJn7mwAYNFqIsPhXdiAnSCB8bc0me?usp=sharing#scrollTo=WIQN6rMj5iKV)

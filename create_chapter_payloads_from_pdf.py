@@ -103,17 +103,19 @@ def get_chapter_name_from_contents(contents):
 
 def count_words(text):
     """
-       Count words in a string using regular expressions.
+    Counts the number of words in a string using regular expressions.
 
-       This function utilizes a regular expression (`\b\w+\b`) to count words more accurately than
-       simple space-based splitting. It identifies words as sequences of alphanumeric characters
-       separated by word boundaries, ensuring accurate word counts in texts with punctuation,
-       spaces, or special characters.
-       These changes will alter the result, can they be made?
-           words = re.findall(r'\b\w+\b', text)
-        return len(words)
+    This method is more accurate than simple space-based splitting as it considers word boundaries,
+    which is beneficial for texts with punctuation, spaces, or special characters.
+
+    Args:
+        text (str): The text string to count words in.
+
+    Returns:
+        int: The number of words in the text.
     """
-    return len(text.split(' '))
+    words = re.findall(r'\b\w+\b', text)
+    return len(words)
 
 
 # get all files in a directory
@@ -210,13 +212,6 @@ def exclude_fluff_from_request_bodies(json_data):
                 # Exclude if chapters not big enough
                 if count_words(chapter_contents) < 1000:
                     exclude_indices.append(index)
-                    """
-                    The function "count_words" returns the number of words, not characters, 
-                    so it would be correct to use 'words' to describe it. 
-                    If we want to indicate the number of characters, need to create a new function:
-                     def count_characters(text):
-                         return len(text)
-                    """
                     print(
                         f"\tEXCLUDED CHAPTER - TOO SMALL: {request_body['name']} ({count_words(chapter_contents)} words)")
                 else:
@@ -378,9 +373,21 @@ def get_chapter_payloads_from_pdf(isbn, pdf_file_path):
 
 
 if __name__ == "__main__":
-    isbn = '1626813582'
-    pdf_path = f'data/{isbn}.pdf'
+    # This script processes a PDF file to extract chapters based on bookmarks and saves this data to a JSON file.
+
+    # Specify the ISBN of the PDF file here. Ensure the file is named in the format '{ISBN}.pdf'.
+    # Define 'data_path' to point to the directory where your PDF file is stored.
+    isbn = '9354990517'
     data_path = 'data'
+    pdf_path = f'{data_path}/{isbn}.pdf'
+
     apply_exclude_fluff = True
     apply_remove_empty_chapters = True
-    process_pdf(pdf_path, data_path, apply_exclude_fluff, apply_remove_empty_chapters)
+
+    logging.info("Starting PDF processing")
+
+    try:
+        process_pdf(pdf_path, data_path, apply_exclude_fluff, apply_remove_empty_chapters)
+        logging.info("PDF processing completed successfully")
+    except Exception as e:
+        logging.error(f"An error occurred while processing the PDF: {e}")
